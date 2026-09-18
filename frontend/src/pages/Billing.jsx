@@ -13,6 +13,8 @@ export default function Billing() {
   const [productSearch, setProductSearch] = useState("");
   const [customer, setCustomer] = useState("");
   const [discount, setDiscount] = useState("0");
+  const [cgstRate, setCgstRate] = useState("0");
+  const [sgstRate, setSgstRate] = useState("0");
   const [paidAmount, setPaidAmount] = useState("0");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [saving, setSaving] = useState(false);
@@ -21,12 +23,12 @@ export default function Billing() {
   const [lastInvoice, setLastInvoice] = useState(null);
 
   useEffect(() => {
-    Promise.all([api.get("products/"), api.get("customers/")]).then(
-      ([productResponse, customerResponse]) => {
+    Promise.all([api.get("products/"), api.get("customers/")])
+      .then(([productResponse, customerResponse]) => {
         setProducts(productResponse.data.filter((product) => product.active));
         setCustomers(customerResponse.data);
-      },
-    ).catch(() => setError("Products and customers could not be loaded."));
+      })
+      .catch(() => setError("Products and customers could not be loaded."));
   }, []);
 
   const subtotal = useMemo(
@@ -37,21 +39,9 @@ export default function Billing() {
       ),
     [cart],
   );
-  const tax = useMemo(
-    () =>
-      cart.reduce(
-        (sum, item) =>
-          sum +
-          (Number(item.product.price) *
-            Number(item.quantity) *
-            Number(item.product.tax_rate)) /
-            100,
-        0,
-      ),
-    [cart],
-  );
-  const cgst = Math.round((tax / 2) * 100) / 100;
-  const sgst = tax - cgst;
+  const cgst = Math.round((subtotal * Number(cgstRate || 0) / 100) * 100) / 100;
+  const sgst = Math.round((subtotal * Number(sgstRate || 0) / 100) * 100) / 100;
+  const tax = cgst + sgst;
   const total = Math.max(0, subtotal + tax - Number(discount || 0));
   const productMatches = useMemo(() => {
     const search = productSearch.trim().toLowerCase();
@@ -121,6 +111,8 @@ export default function Billing() {
       const response = await api.post("invoices/", {
         customer: Number(customer),
         discount: Number(discount || 0),
+        cgst_rate: Number(cgstRate || 0),
+        sgst_rate: Number(sgstRate || 0),
         paid_amount: Number(paidAmount || 0),
         payment_method: paymentMethod,
         items: cart.map((item) => ({
@@ -136,13 +128,22 @@ export default function Billing() {
       setCart([]);
       setCustomer("");
       setDiscount("0");
+      setCgstRate("0");
+      setSgstRate("0");
       setPaidAmount("0");
       const productResponse = await api.get("products/");
       setProducts(productResponse.data.filter((product) => product.active));
     } catch (requestError) {
-      const detail =
-        requestError.response?.data?.detail ||
-        requestError.response?.data?.items?.[0] ||
+      const responseData = requestError.response?.data;
+      const detail = responseData?.detail ||
+        responseData?.items?.[0] ||
+        Object.entries(responseData || {})
+          .flatMap(([field, messages]) =>
+            (Array.isArray(messages) ? messages : [messages]).map(
+              (message) => `${field}: ${message}`,
+            ),
+          )
+          .join(" ") ||
         "Could not create the bill.";
       setError(
         typeof detail === "string" ? detail : "Please check the bill details.",
@@ -321,9 +322,12 @@ export default function Billing() {
                           {item.quantity} {item.product.unit}
                         </td>
                         <td>
-                          <span className="d-block">{item.product.tax_rate}% GST</span>
+                          <span className="d-block">
+                            {(Number(cgstRate || 0) + Number(sgstRate || 0)).toFixed(2)}% GST
+                          </span>
                           <small className="text-secondary">
-                            CGST {(Number(item.product.tax_rate) / 2).toFixed(2)}% · SGST {(Number(item.product.tax_rate) / 2).toFixed(2)}%
+                            CGST {Number(cgstRate || 0).toFixed(2)}% · SGST{" "}
+                            {Number(sgstRate || 0).toFixed(2)}%
                           </small>
                         </td>
                         <td className="text-end">
@@ -376,16 +380,42 @@ export default function Billing() {
                 </strong>
               </div>
               <div className="summary-line">
-                <span>CGST</span>
+                <span>CGST ({Number(cgstRate || 0).toFixed(2)}%)</span>
                 <strong>
                   ₹{cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </strong>
               </div>
               <div className="summary-line">
-                <span>SGST</span>
+                <span>SGST ({Number(sgstRate || 0).toFixed(2)}%)</span>
                 <strong>
                   ₹{sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </strong>
+              </div>
+              <div className="row g-2 mt-3">
+                <div className="col-6">
+                  <label className="form-label">CGST rate (%)</label>
+                  <input
+                    className="form-control"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={cgstRate}
+                    onChange={(e) => setCgstRate(e.target.value)}
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="form-label">SGST rate (%)</label>
+                  <input
+                    className="form-control"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={sgstRate}
+                    onChange={(e) => setSgstRate(e.target.value)}
+                  />
+                </div>
               </div>
               <label className="form-label mt-3">Discount</label>
               <input

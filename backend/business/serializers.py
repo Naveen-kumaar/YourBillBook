@@ -61,11 +61,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
         fields = [
             "id", "invoice_number", "customer", "customer_name", "invoice_date",
             "subtotal", "tax", "discount", "total", "paid_amount", "status",
+            "cgst_rate", "sgst_rate", "cgst", "sgst",
             "items", "payment_method", "payment_reference", "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "invoice_number", "invoice_date", "subtotal", "tax", "total",
-            "status", "created_at", "updated_at",
+            "cgst", "sgst", "status", "created_at", "updated_at",
         ]
 
     def validate(self, attrs):
@@ -84,6 +85,10 @@ class InvoiceSerializer(serializers.ModelSerializer):
         discount = attrs.get("discount", Decimal("0"))
         if discount < 0:
             raise serializers.ValidationError({"discount": "Discount cannot be negative."})
+        for field_name in ("cgst_rate", "sgst_rate"):
+            rate = attrs.get(field_name, Decimal("0"))
+            if rate < 0 or rate > 100:
+                raise serializers.ValidationError({field_name: "Tax rate must be between 0 and 100."})
         return attrs
 
     @transaction.atomic
@@ -93,9 +98,10 @@ class InvoiceSerializer(serializers.ModelSerializer):
         payment_reference = validated_data.pop("payment_reference", "")
         requested_paid = validated_data.pop("paid_amount", Decimal("0"))
         discount = validated_data.pop("discount", Decimal("0"))
+        cgst_rate = validated_data.pop("cgst_rate", Decimal("0"))
+        sgst_rate = validated_data.pop("sgst_rate", Decimal("0"))
 
         subtotal = Decimal("0")
-        tax_total = Decimal("0")
         invoice_items = []
 
         for item_data in items_data:
@@ -109,17 +115,22 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 )
 
             line_subtotal = quantity * product.price
-            line_tax = line_subtotal * product.tax_rate / Decimal("100")
             subtotal += line_subtotal
-            tax_total += line_tax
             invoice_items.append((product, quantity, product.price, product.tax_rate, line_subtotal))
 
+        cgst = (subtotal * cgst_rate / Decimal("100")).quantize(Decimal("0.01"))
+        sgst = (subtotal * sgst_rate / Decimal("100")).quantize(Decimal("0.01"))
+        tax_total = cgst + sgst
         total = max(Decimal("0"), subtotal + tax_total - discount)
         paid_amount = min(requested_paid, total)
         status_value = "paid" if paid_amount == total and total > 0 else "partial" if paid_amount > 0 else "unpaid"
         invoice = Invoice.objects.create(
             invoice_number=f"INV-{timezone.now():%Y%m%d}-{uuid4().hex[:6].upper()}",
             subtotal=subtotal,
+            cgst_rate=cgst_rate,
+            sgst_rate=sgst_rate,
+            cgst=cgst,
+            sgst=sgst,
             tax=tax_total,
             discount=discount,
             total=total,

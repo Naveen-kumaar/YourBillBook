@@ -18,6 +18,10 @@ export function downloadReceiptPdf(invoice, customerDetails = null) {
   const right = pageWidth - margin;
   const money = (value) =>
     `Rs. ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+  const cgstRate = Number(invoice.cgst_rate || 0);
+  const sgstRate = Number(invoice.sgst_rate || 0);
+  const cgst = Number(invoice.cgst ?? Number(invoice.tax || 0) / 2);
+  const sgst = Number(invoice.sgst ?? Number(invoice.tax || 0) - cgst);
   const dateValue = invoice.invoice_date
     ? new Date(invoice.invoice_date)
     : new Date();
@@ -141,7 +145,7 @@ export function downloadReceiptPdf(invoice, customerDetails = null) {
     pdf.text(descriptionLines, columns[0] + 3, y + 1);
     pdf.text(String(item.quantity || 0), columns[1] + 3, y + 1);
     pdf.text(money(item.price), columns[2] + 3, y + 1);
-    pdf.text(`${item.tax_rate || 0}%`, columns[3] + 3, y + 1);
+    pdf.text(`${(cgstRate + sgstRate).toFixed(2)}%`, columns[3] + 3, y + 1);
     pdf.text(money(item.line_total), columns[5] - 3, y + 1, { align: "right" });
     line(y + rowHeight - 5, [235, 238, 242]);
     y += rowHeight;
@@ -158,7 +162,9 @@ export function downloadReceiptPdf(invoice, customerDetails = null) {
     y += bold ? 8 : 5;
   };
   totalLine("Subtotal", invoice.subtotal);
-  totalLine("Tax", invoice.tax);
+  totalLine(`CGST (${cgstRate.toFixed(2)}%)`, cgst);
+  totalLine(`SGST (${sgstRate.toFixed(2)}%)`, sgst);
+  totalLine("Total tax", invoice.tax);
   totalLine("Discount", invoice.discount);
   line(y - 2);
   y += 5;
@@ -205,6 +211,10 @@ export function downloadBillReceiptPdf(invoice, customerDetails = null) {
   const margin = 6;
   const right = pageWidth - margin;
   const money = (value) => `Rs. ${Number(value || 0).toFixed(2)}`;
+  const cgstRate = Number(invoice.cgst_rate || 0);
+  const sgstRate = Number(invoice.sgst_rate || 0);
+  const cgst = Number(invoice.cgst ?? Number(invoice.tax || 0) / 2);
+  const sgst = Number(invoice.sgst ?? Number(invoice.tax || 0) - cgst);
   const dateValue = invoice.invoice_date
     ? new Date(invoice.invoice_date)
     : new Date();
@@ -259,7 +269,7 @@ export function downloadBillReceiptPdf(invoice, customerDetails = null) {
     pdf.setTextColor(90, 99, 112);
     pdf.setFontSize(7);
     pdf.text(
-      `${item.quantity || 0} x ${money(item.price)} | Tax ${item.tax_rate || 0}%`,
+      `${item.quantity || 0} x ${money(item.price)} | GST ${(cgstRate + sgstRate).toFixed(2)}%`,
       margin,
       y,
     );
@@ -277,7 +287,9 @@ export function downloadBillReceiptPdf(invoice, customerDetails = null) {
     y += bold ? 7 : 5;
   };
   totalLine("Subtotal", invoice.subtotal);
-  totalLine("Tax", invoice.tax);
+  totalLine(`CGST (${cgstRate.toFixed(2)}%)`, cgst);
+  totalLine(`SGST (${sgstRate.toFixed(2)}%)`, sgst);
+  totalLine("Total tax", invoice.tax);
   if (Number(invoice.discount)) totalLine("Discount", invoice.discount);
   totalLine("TOTAL", invoice.total, true);
   totalLine("Paid", invoice.paid_amount);

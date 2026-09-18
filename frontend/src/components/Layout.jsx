@@ -23,6 +23,12 @@ export default function Layout() {
   const [products, setProducts] = useState([]);
   const [productSearch, setProductSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    document.body.classList.toggle("sidebar-open", sidebarOpen);
+    return () => document.body.classList.remove("sidebar-open");
+  }, [sidebarOpen]);
 
   useEffect(() => {
     api.get("products/").then((response) => setProducts(response.data));
@@ -74,6 +80,7 @@ export default function Layout() {
             <NavLink
               key={to}
               to={to}
+              onClick={() => setSidebarOpen(false)}
               className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
             >
               <i className={`bi ${icon}`}></i>
@@ -89,11 +96,24 @@ export default function Layout() {
           </button>
         </div>
       </aside>
+      {sidebarOpen && (
+        <button
+          className="sidebar-scrim"
+          type="button"
+          aria-label="Close navigation"
+          onClick={() => setSidebarOpen(false)}
+        ></button>
+      )}
 
       <main className="main-area">
         <header className="topbar">
           <div>
-            <button className="mobile-menu btn btn-light me-2" onClick={() => document.body.classList.toggle("sidebar-open")}>
+            <button
+              className="mobile-menu btn btn-light me-2"
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={() => setSidebarOpen((open) => !open)}
+            >
               <i className="bi bi-list"></i>
             </button>
             <span className="fw-semibold text-secondary">Business Overview</span>
